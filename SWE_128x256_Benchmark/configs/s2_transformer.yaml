@@ -1,0 +1,28 @@
+defaults:
+  - data: swe_128x256
+  - grid: icosphere_l5
+  - model: s2_transformer
+  - objective: residual
+  - training: default
+  - _self_
+
+hydra:
+  searchpath:
+    - file://configs
+  job:
+    chdir: true
+  run:
+    dir: outputs/SWE_128x256_Benchmark/s2_transformer/seed${seed}
+
+seed: 0
+device: null
+
+training:
+  max_epochs: 100
+  lr: 1.0e-4
+  scheduler:
+    kind: plateau
+    factor: 0.1
+    patience: 10
+  grad_clip_norm: null
+  early_stopping_patience: null

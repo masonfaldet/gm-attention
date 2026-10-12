@@ -1,0 +1,15 @@
+kind: sfno
+model_view:
+  nlat: 256
+  nlon: 512
+architecture:
+  _target_: experiments.shallow_water.models.build_sfno_reference
+  nlat: ${model.model_view.nlat}
+  nlon: ${model.model_view.nlon}
+  in_chans: 4
+  out_chans: 3
+  embed_dim: 22
+  num_layers: 4
+  scale_factor: 2
+  residual_prediction: false
+  normalization_layer: instance_norm

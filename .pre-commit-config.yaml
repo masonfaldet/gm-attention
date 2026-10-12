@@ -1,0 +1,6 @@
+# Optional: `pre-commit install` runs ruff on each commit with the repository's ruff.toml.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.4
+    hooks:
+      - id: ruff

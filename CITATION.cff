@@ -1,0 +1,22 @@
+# Citation metadata (https://citation-file-format.github.io/). GitHub renders this as the repository's
+# "Cite this repository" entry.
+cff-version: 1.2.0
+message: "If you use this code, please cite the paper."
+type: software
+title: "gm-attention: gauge-equivariant aggregation and attention on the sphere"
+version: 0.1.0
+license: MIT
+repository-code: https://github.com/masonfaldet/gm-attention
+url: https://masonfaldet.github.io/gm-attention/
+authors:
+  - family-names: Faldet
+    given-names: Mason
+preferred-citation:
+  type: conference-paper
+  title: "Gauge-Equivariant Aggregation for Spherical Attention"
+  authors:
+    - family-names: Faldet
+      given-names: Mason
+  year: 2026
+  status: submitted
+  notes: "Under review as a conference paper at ICLR 2027."

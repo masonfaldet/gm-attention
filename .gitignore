@@ -1,0 +1,34 @@
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.mypy_cache/
+
+# Environments (uv creates .venv; the released-baseline environment is .venv-ref, see
+# S2D3DS_128x256_Segmentation/reference/README.md)
+.venv/
+.venv-ref/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# The documentation site is built from docs/ by `mkdocs build` and published by .github/workflows/docs.yml
+site/
+
+# Written by the runs; the directories themselves are tracked through .gitkeep because the drivers expect them
+outputs/*
+!outputs/.gitkeep
+logs/*
+!logs/.gitkeep
+data/*
+!data/.gitkeep
+
+# Editors and the OS
+.idea/
+.vscode/
+.claude/
+.DS_Store

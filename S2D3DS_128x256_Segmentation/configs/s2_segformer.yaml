@@ -1,0 +1,16 @@
+defaults:
+  - data: stanford_2d3ds
+  - model: s2_segformer
+  - training: segformer
+  - _self_
+
+hydra:
+  searchpath:
+    - file://configs
+  job:
+    chdir: true
+  run:
+    dir: outputs/S2D3DS_128x256_Segmentation/s2_segformer/seed${seed}
+
+seed: 0
+device: null

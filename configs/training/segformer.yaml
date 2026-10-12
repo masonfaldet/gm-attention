@@ -1,0 +1,22 @@
+# The released segmentation script (torch-harmonics v0.8.0, examples/segmentation/train.py): AdamW with weight decay 0.1 on every parameter, cosine to 1e-6 stepped once per epoch, clipping at 4.0, batches of 8, 200 epochs, no augmentation, no early stopping and no checkpoint selection.
+batch_size: 8
+max_epochs: 200
+# the paper (Section 4.1) states 0.5e-4 where the script's default is 5e-4; the paper's value
+lr: 5.0e-5
+optimizer: adamw
+weight_decay: 0.1
+grad_clip_norm: 4.0
+label_smoothing: 0.0
+scheduler:
+  kind: cosine
+  factor: 0.5 # plateau only, unused here
+  patience: 5 # plateau only, unused here
+  eta_min: 1.0e-6
+  restart: false
+early_stopping_patience: null
+validate_every: 1
+checkpoint_every: null
+# continue this run directory's own checkpoints/last.pt (configs/training/default.yaml)
+resume: false
+# a resume whose model or training settings differ from the saved protocol is refused unless declared here, which records the change in the protocol's history; the data may never change
+allow_protocol_drift: false

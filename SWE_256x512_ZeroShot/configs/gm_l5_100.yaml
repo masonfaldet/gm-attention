@@ -1,0 +1,29 @@
+defaults:
+  - data: swe_256x512
+  - grid: icosphere_l5
+  - model: sl_attention
+  - objective: residual
+  - training: default
+  - _self_
+
+hydra:
+  searchpath:
+    - file://configs
+  job:
+    chdir: true
+  run:
+    dir: outputs/SWE_256x512_ZeroShot/gm_l5_100/seed${seed}
+
+seed: 0
+device: null
+
+model:
+  architecture:
+    chunk_size: 2048
+
+training:
+  max_epochs: 100
+  lr: 2e-2
+  early_stopping_patience: null
+  scheduler:
+    kind: cosine

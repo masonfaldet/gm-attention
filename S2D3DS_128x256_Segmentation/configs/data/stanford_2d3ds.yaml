@@ -1,0 +1,11 @@
+# Stanford 2D3DS as the released segmentation script (torch-harmonics v0.8.0) prepares and splits it.
+# One file for every arm and seed: the split's realization depends on the file's sample order.
+dataset_file: data/2D3DS/stanford_2d3ds_dataset_ds16.h5
+# Equiangular grid with both pole rows; per-channel normalization from the train split's quadrature-weighted statistics.
+grid: equiangular
+img_size: [128, 256]
+split_seed: 333
+split_ratios: [0.95, 0.025, 0.025]
+exclude_polar_fraction: 0.0
+loader_order_seed: 5000
+num_workers: 0

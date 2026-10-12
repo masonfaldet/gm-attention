@@ -1,0 +1,24 @@
+defaults:
+  - data: stanford_2d3ds
+  - model: sos2_segformer_scalar
+  - training: segformer
+  - _self_
+
+hydra:
+  searchpath:
+    - file://configs
+  job:
+    chdir: true
+  run:
+    dir: outputs/S2D3DS_128x256_Segmentation/sos2_segformer_scalar/seed${seed}
+
+seed: 0
+device: null
+
+# the settings of the reported ablation runs (README): the rate chosen on the validation split (drop-path 0.1
+# is in the model config), two panoramas per forward (four accumulated per optimizer step of eight), two workers
+training:
+  lr: 1.5e-3
+  panoramas_per_forward: 2
+data:
+  num_workers: 2

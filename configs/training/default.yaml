@@ -1,0 +1,22 @@
+# "Attention on the Sphere", Appendix C.2: Adam, ReduceLROnPlateau, lr 2e-3, 3200 gradient steps (batches of 4 over 256 trajectories per epoch, 50 epochs).
+batch_size: 4
+# reference (tensor) kinds only: gradients accumulated over micro-batches of this size per optimizer step, null batches whole; GM kinds accumulate single-sample steps and ignore it
+micro_batch_size: null
+max_epochs: 50
+lr: 2.0e-3
+weight_decay: 0.0
+grad_clip_norm: 1.0
+# plateau: ReduceLROnPlateau on the monitored validation loss; cosine: CosineAnnealingLR from lr to eta_min over max_epochs, stepped once per epoch, so max_epochs cannot change on resume
+scheduler:
+  kind: plateau
+  factor: 0.5 # plateau only
+  patience: 5 # plateau only
+  eta_min: 0.0 # cosine only: the learning rate the decay ends at
+  # cosine only, on resume: a new cosine cycle at lr over the added epochs (warm restart, the optimizer's moments carried over), accepted once the checkpoint's cycle has finished
+  restart: false
+# epochs without a new best monitored validation loss before the run ends; null disables
+early_stopping_patience: 10
+validate_every: 1
+checkpoint_every: null # only last.pt/best.pt; set an int for periodic snapshots too
+# continue this run directory's checkpoints/last.pt (weights, optimizer, scheduler, RNG state, epoch, early-stopping counter); the run's paper_protocol.json is verified, not rewritten, and a missing checkpoint is an error
+resume: false

@@ -1,0 +1,51 @@
+# Lint and test on every push and pull request. The lock pins torch 2.6.0 from PyTorch's CUDA 11.8 index on
+# Linux (the GPU nodes the experiments ran on), so the first `uv sync` on a runner downloads torch and its
+# NVIDIA libraries (a few GB); setup-uv caches them keyed on uv.lock, so later runs reuse the download. The
+# tests run on the CPU: the fused C++ kernels compile with the runner's g++ when a test switches them on, and
+# the CUDA kernels are never built without a GPU.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install the dev group only
+        run: uv sync --locked --only-group dev --no-install-project
+      - name: ruff
+        run: uv run --no-sync ruff check .
+      - name: Byte-compile every Python file
+        # The released torch-harmonics metrics.py is vendored byte for byte and does not compile (metrics_fixed.py
+        # is the corrected copy the harness runs), so the vendored tree is skipped.
+        run: uv run --no-sync python -m compileall -q -x 'reference/upstream' src experiments tests S2D3DS_128x256_Segmentation SWE_128x256_Benchmark SWE_256x512_Ablation SWE_256x512_ZeroShot
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install the project with its dev and experiments groups
+        run: uv sync --locked
+      - name: pytest
+        run: uv run --no-sync pytest -q -p no:cacheprovider

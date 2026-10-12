@@ -1,0 +1,82 @@
+site_name: gm-attention
+site_description: Gauge-equivariant aggregation and attention on the sphere, the code of the paper's experiments.
+site_url: https://masonfaldet.github.io/gm-attention/
+repo_url: https://github.com/masonfaldet/gm-attention
+repo_name: masonfaldet/gm-attention
+docs_dir: docs
+
+theme:
+  name: material
+  logo: assets/images/gm-attention-icon-white.png
+  favicon: assets/images/gm-attention-icon.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: numpy
+            show_root_heading: true
+            show_source: false
+            merge_init_into_class: true
+            separate_signature: true
+            show_signature_annotations: true
+            members_order: source
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.arithmatex:
+      generic: true
+  # The experiment pages include the bundle READMEs verbatim, so the site and the repository say the same thing.
+  - pymdownx.snippets:
+      base_path: [".", "docs"]
+      check_paths: true
+  - toc:
+      permalink: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - Reproducing the paper:
+      - SWE 128x256 benchmark: experiments/swe_128x256_benchmark.md
+      - SWE 256x512 ablation: experiments/swe_256x512_ablation.md
+      - SWE 256x512 zero-shot transfer: experiments/swe_256x512_zeroshot.md
+      - Stanford 2D-3D-S segmentation: experiments/s2d3ds_segmentation.md
+  - Mathematics:
+      - Conventions: math/conventions.md
+      - Sphere geometry: math/sphere_geometry.md
+      - Discretization: math/discretization.md
+      - SO(2) representations: math/so2_representations.md
+      - GM-aggregation: math/gm_aggregation.md
+  - API reference:
+      - Representations: api/representations.md
+      - Discretization: api/discretization.md
+      - Neural network layers: api/nn.md
+      - Training: api/training.md
+      - Data: api/data.md
+  - Development:
+      - Testing: development/testing.md

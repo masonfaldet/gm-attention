@@ -1,0 +1,27 @@
+grid:
+  subdivisions: 5
+kind: gm_attention_depth1
+architecture:
+  _target_: experiments.shallow_water.models.GmAttentionDepth1
+  base_field_type:
+    0: 1
+    1: 1
+    2: 1
+  multiplicity: 16
+  num_layers: 4
+  num_heads: 2
+  ffn_multiplier: 2
+  encode_mode: learned_integral
+  deep_cutoff: 0.27571504347419135
+  decode_refine_cutoff: 0.13962634015954636
+  fine_skip_init: ${objective.gm_fine_skip_init}
+  window: hard
+  nonlinearity: scalar_gate_double_sigmoid
+  dropout: 0.0
+  gradient_checkpointing: true
+  n_radial_basis: 8
+  radial_hidden_features:
+  - 16
+  bias: true
+  deep_mixer: convolution
+  decode_self_interaction: linear

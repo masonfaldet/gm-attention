@@ -1,0 +1,30 @@
+defaults:
+  - data: swe_128x256
+  - grid: icosphere_l5
+  - model: sfno
+  - objective: residual
+  - training: default
+  - _self_
+
+hydra:
+  searchpath:
+    - file://configs
+  job:
+    chdir: true
+  run:
+    dir: outputs/SWE_128x256_Benchmark/sfno/seed${seed}
+
+seed: 0
+device: null
+
+model:
+  model_view:
+    nlat: 128
+    nlon: 256
+  architecture:
+    embed_dim: 32
+
+training:
+  max_epochs: 100
+  lr: 3.2e-2
+  early_stopping_patience: null

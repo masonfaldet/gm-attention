@@ -1,0 +1,24 @@
+defaults:
+  - data: stanford_2d3ds
+  - model: sos2_segformer
+  - training: segformer
+  - _self_
+
+hydra:
+  searchpath:
+    - file://configs
+  job:
+    chdir: true
+  run:
+    dir: outputs/S2D3DS_128x256_Segmentation/sos2_segformer/seed${seed}
+
+seed: 0
+device: null
+
+# the settings of the reported runs (README): the rate chosen on the validation split (drop-path 0.2 is in
+# the model config), four panoramas per forward (two accumulated per optimizer step of eight), two loader workers
+training:
+  lr: 3.0e-3
+  panoramas_per_forward: 4
+data:
+  num_workers: 2

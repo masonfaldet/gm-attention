@@ -1,0 +1,23 @@
+defaults:
+  - data: swe_256x512
+  - grid: icosphere_l5
+  - model: d1_attention_rho01
+  - objective: residual
+  - training: default
+  - _self_
+
+hydra:
+  searchpath:
+    - file://configs
+  job:
+    chdir: true
+  run:
+    dir: outputs/SWE_256x512_Ablation/gm_attention_rho01/seed${seed}
+
+seed: 0
+device: null
+
+training:
+  max_epochs: 100
+  lr: 1.6e-2
+  early_stopping_patience: null

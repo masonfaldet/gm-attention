@@ -1,0 +1,27 @@
+# torch-harmonics' shallow-water solver at 128x256, the released benchmark script's configuration.
+# 43 retained spherical-harmonic degrees, 0 through 42, at this resolution
+nlat: 128
+nlon: 256
+# integrated as solver_substeps Adams-Bashforth steps of 150 s
+lead_time_seconds: 1800.0
+solver_substeps: 12
+# mach number of the random initial conditions
+mach: 0.2
+# Earth's rotation rate (rad/s)
+omega: 7.292e-05
+# z-score each channel by statistics calibrated once on normalization_examples area-weighted samples
+normalize: true
+# data seeds are fixed and independent of the model seed: every arm and seed sees the same trajectories
+train_seed: 1000
+val_seed: 2000
+test_seed: 3000
+normalization_seed: 4000
+loader_order_seed: 5000
+normalization_examples: 128
+# epoch_index: fresh trajectories every epoch; fixed_index: the same trajectories every epoch
+train_sample_policy: epoch_index
+val_sample_policy: fixed_index
+num_train_examples: 256
+num_val_examples: 128
+# optional on-disk cache of solved spectral states, shared across runs; results identical without
+spectral_cache_dir: null

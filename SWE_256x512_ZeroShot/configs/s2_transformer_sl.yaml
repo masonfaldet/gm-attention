@@ -1,0 +1,24 @@
+defaults:
+  - data: swe_256x512
+  - grid: icosphere_l5
+  - model: s2_transformer_single_level
+  - objective: residual
+  - training: default
+  - _self_
+
+hydra:
+  searchpath:
+    - file://configs
+  job:
+    chdir: true
+  run:
+    dir: outputs/SWE_256x512_ZeroShot/s2_transformer_sl/seed${seed}
+
+seed: 0
+device: null
+
+training:
+  max_epochs: 100
+  lr: 6e-3
+  micro_batch_size: 2
+  early_stopping_patience: null

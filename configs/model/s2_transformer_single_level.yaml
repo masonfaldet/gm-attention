@@ -1,0 +1,27 @@
+kind: attention_on_sphere
+model_view:
+  nlat: 128
+  nlon: 256
+  grid: legendre-gauss
+architecture:
+  _target_: experiments.shallow_water.models.build_reference_transformer
+  nlat: ${model.model_view.nlat}
+  nlon: ${model.model_view.nlon}
+  in_chans: 4
+  out_chans: 3
+  embed_dim: 128
+  num_layers: 4
+  num_heads: 1
+  mlp_ratio: 2.0
+  attention_mode: neighborhood
+  encoder_kernel_shape:
+  - 5
+  - 4
+  filter_basis_type: piecewise linear
+  pos_embed: spectral
+  residual_prediction: false
+  scale_factor: 1
+  grid_internal: legendre-gauss
+  theta_cutoff: null
+  normalization_layer: instance_norm
+  grid: legendre-gauss

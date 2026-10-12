@@ -1,0 +1,71 @@
+kind: gm_segformer
+grid_internal: icosphere
+scale_factor: 2
+readout_rows: 1.5
+architecture:
+  _target_: experiments.stanford_2d3ds.model.GmSegformer
+  in_channels: 3
+  base_field_type:
+    0: 3
+    1: 1
+    2: 1
+  multiplicities:
+  - 2
+  - 4
+  - 6
+  - 6
+  heads:
+  - 1
+  - 1
+  - 2
+  - 4
+  depths:
+  - 3
+  - 4
+  - 7
+  - 3
+  window: hard
+  nonlinearity: scalar_gate_double_sigmoid
+  drop_path_rate: 0.1
+  readout: convolution
+  readout_channels:
+  - 8
+  - 16
+  - 32
+  - 32
+  attention_batched: true
+  gradient_checkpointing: false
+  evaluation_chunk_size: null
+  n_radial_basis: 8
+  radial_hidden_features:
+  - 14
+  radial_basis: gaussian
+  bias: true
+  value_kind: steerable
+  ffn_expansion: 2
+  final_stage_scalars: null
+  vertical_conditioning: true
+  decoder: fusion
+  decoder_channels: 32
+  decoder_dropout: 0.1
+  stem_channels: 8
+  stem_kind: pointwise
+  gravity_conditioning: false
+  gravity_projection: false
+  gravity_readout: true
+  gravity_readout_expansion: 2
+  normalized_mix: true
+  normalized_readout: true
+  head_hidden: 64
+  stage_field_types:
+  - 0: 14
+  - 0: 26
+  - 0: 38
+  - 0: 48
+  gravity_input: true
+icosphere_levels:
+- 5
+- 4
+- 3
+- 2
+interpolate_spacings: 1.5

@@ -1,0 +1,9 @@
+# The model predicts the update Delta f_t; the prediction fed to the loss and metrics is f_t + Delta f_t (a coefficient-wise sum), never the raw delta.
+name: residual
+residual: true
+
+# the U-shaped models' fine skip starts at zero: train.py adds the input outside the network under this objective, so an identity-initialized skip would double-count it
+fine_skip_init: zero
+
+# the depth-1 model's conditioned-to-prognostic skip, zero for the same reason
+gm_fine_skip_init: zero

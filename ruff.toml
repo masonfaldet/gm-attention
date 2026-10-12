@@ -1,0 +1,11 @@
+# The released torch-harmonics files under S2D3DS_128x256_Segmentation/reference are vendored byte for
+# byte (checksummed); metrics_fixed.py is one of them with a single line re-indented.
+extend-exclude = [
+    "S2D3DS_128x256_Segmentation/reference/upstream",
+    "S2D3DS_128x256_Segmentation/reference/metrics_fixed.py",
+]
+
+# Pyflakes plus the syntax-error rules: what the code was written against. Ruff's bundled default set has
+# grown since, so the selection is pinned here to keep `ruff check` the same on every machine and in CI.
+[lint]
+select = ["E9", "F"]

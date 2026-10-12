@@ -1,0 +1,18 @@
+kind: gm_attention_single
+architecture:
+  _target_: experiments.shallow_water.models.GmAttentionSingleLevel
+  base_field_type:
+    0: 1
+    1: 1
+    2: 1
+  multiplicity: 16
+  num_layers: 4
+  num_heads: 2
+  ffn_multiplier: 2
+  window: hard
+  nonlinearity: scalar_gate_double_sigmoid
+  self_interaction: linear
+  deep_cutoff: 0.27571504347419135
+  conv_cutoff: 0.13962634015954636
+  chunk_size: 1024
+  fine_skip_init: ${objective.gm_fine_skip_init}

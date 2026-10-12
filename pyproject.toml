@@ -1,0 +1,94 @@
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "gm-attention"
+version = "0.1.0"
+description = "Gauge-equivariant aggregation and attention on the sphere: code for the paper's experiments."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    # numpy, scipy, torch and h5py are pinned on Linux to the newest releases with manylinux_2_17 wheels
+    # (the GPU nodes the experiments ran on report glibc 2.17); elsewhere they resolve normally.
+    "numpy>=2.4.6; sys_platform != 'linux'",
+    "numpy==2.2.6; sys_platform == 'linux'",
+    "scipy>=1.17.1; sys_platform != 'linux'",
+    "scipy==1.16.3; sys_platform == 'linux'",
+    "scipy-stubs~=1.18.1",
+    "torch>=2.13.0; sys_platform != 'linux'",
+    "torch==2.6.0; sys_platform == 'linux'",
+    "torch-harmonics==0.8.0",
+    "trimesh>=5.0.0",
+]
+
+[project.urls]
+Repository = "https://github.com/masonfaldet/gm-attention"
+Documentation = "https://masonfaldet.github.io/gm-attention/"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.165.10",
+    "pytest>=9.1.1",
+    "ruff>=0.16.4",
+    "ninja>=1.13.2",
+]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.7",
+    "mkdocstrings-python>=2.0.7",
+]
+experiments = [
+    "h5py>=3.11; sys_platform != 'linux'",
+    "h5py==3.14.0; sys_platform == 'linux'",
+    "hydra-core>=1.3.5",
+    # S2D3DS_128x256_Segmentation/prepare_data.py (the released downloader and converter)
+    "requests>=2.32",
+    "pillow<12; sys_platform == 'linux'",
+    "pillow; sys_platform != 'linux'",
+    "tqdm",
+]
+# torch-harmonics v0.8.0's released segmentation script (S2D3DS_128x256_Segmentation/reference), which
+# needs torchvision, pandas, matplotlib and tqdm; synced into its own environment (that bundle's README).
+reference = [
+    "torchvision==0.21.0; sys_platform == 'linux'",
+    "torchvision; sys_platform != 'linux'",
+    "pillow<12; sys_platform == 'linux'",
+    "pandas==2.3.2; sys_platform == 'linux'",
+    "pandas; sys_platform != 'linux'",
+    "contourpy==1.3.2; sys_platform == 'linux'",
+    "matplotlib>=3.10",
+    "tqdm",
+]
+
+[tool.pytest.ini_options]
+# `slow` marks checks that build a full-resolution model and run a real forward/backward: minutes on CPU,
+# seconds on a GPU. Deselected by default so the ordinary suite stays interactive; `uv run pytest -m slow`
+# runs them.
+markers = ["slow: full-resolution forward/backward; deselected by default"]
+addopts = "-m 'not slow'"
+# The repository root, so `experiments` and `tests.support` import the same way from any working directory.
+pythonpath = ["."]
+# The released torch-harmonics files are vendored with their own tests, written against their own environment.
+norecursedirs = ["S2D3DS_128x256_Segmentation/reference/upstream", ".venv", ".venv-ref"]
+
+[tool.uv]
+# dev and experiments cover development and running an experiment; docs is opt-in (`uv sync --group docs`).
+default-groups = ["dev", "experiments"]
+
+[tool.uv.sources]
+# On Linux, torch and torchvision come from PyTorch's cu118 index: CUDA 11.8 still ships kernels for
+# compute capability 7.0 (Tesla V100), and 2.6.0 is the newest torch with a glibc-2.17-compatible wheel.
+torch = [
+  { index = "pytorch-cu118", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+  { index = "pytorch-cu118", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
