@@ -65,10 +65,13 @@ def test_chunked_matches_unchunked_to_floating_point_precision(
         ), frequency
 
 
-def test_useful_chunk_sizes_come_out_exactly_equal() -> None:
+def test_useful_chunk_sizes_come_out_equal_to_the_last_place() -> None:
     """Recording what was measured, so a regression in the split logic is
-    visible rather than absorbed into a tolerance. Only very small chunks
-    reorder the reduction; the sizes anyone would actually run are exact."""
+    visible rather than absorbed into a loose tolerance. Only very small
+    chunks reorder the reduction; the sizes anyone would actually run agree
+    to a few units in the last place (bitwise on macOS arm64 builds of torch,
+    a few ulps apart on x86 Linux builds, whose segment sums accumulate in
+    another order)."""
     layer, discretization, x, _ = _setup()
 
     reference = layer(x, discretization)
@@ -76,7 +79,7 @@ def test_useful_chunk_sizes_come_out_exactly_equal() -> None:
     for chunk_size in (100, 10_000):
         chunked = layer.forward_chunked(x, discretization, chunk_size=chunk_size)
         for frequency in reference.field_type.frequencies:
-            assert torch.equal(reference[frequency], chunked[frequency])
+            torch.testing.assert_close(reference[frequency], chunked[frequency], rtol=0, atol=1e-15)
 
 
 @pytest.mark.parametrize("self_interaction", ["none", "linear"])
