@@ -226,6 +226,82 @@ def build_tangent_frames(
     ).contiguous()
 
 
+def build_coordinate_frames(
+    nodes: Tensor,  # (n_nodes, 3)
+) -> Tensor:
+    """Construct the spherical-coordinate frames ``(e_theta, e_phi)``.
+
+    For a node ``p = (sin theta cos phi, sin theta sin phi, cos theta)`` the
+    frame vectors are the unit tangents of the colatitude and longitude
+    coordinate lines,
+
+        e_theta = (cos theta cos phi, cos theta sin phi, -sin theta),
+        e_phi   = (-sin phi, cos phi, 0),
+
+    with ``e_theta x e_phi = p``. Unlike :func:`build_tangent_frames`, this
+    frame field is covariant under rotations about the polar axis: the
+    rotation by ``alpha`` carries the frame at ``(theta, phi)`` onto the
+    frame at ``(theta, phi + alpha)``. On a tensor-product grid the edge
+    geometry expressed in these frames therefore depends on the two
+    colatitude rows and the longitude offset only, which
+    :mod:`gm_attention.discretization.stencil` folds into per-row tables.
+    Choosing these frames over :func:`build_tangent_frames` is a change of
+    gauge, to which every gauge-equivariant layer is insensitive.
+
+    Parameters
+    ----------
+    nodes
+        Unit-sphere nodes with shape ``(n_nodes, 3)``, none at a pole.
+
+    Returns
+    -------
+    Tensor
+        Oriented orthonormal tangent frames with shape ``(n_nodes, 3, 2)``.
+
+    Raises
+    ------
+    ValueError
+        If a node lies at a pole, where the coordinate frame is undefined
+        (``sin theta`` below the dtype tolerance). The ``"lobatto"`` and
+        ``"equiangular"`` tensor-product grids carry pole nodes;
+        ``"legendre-gauss"`` has none.
+    """
+    _validate_sphere_nodes(nodes)
+
+    tolerance = 1e-10 if nodes.dtype == torch.float64 else 1e-5
+
+    sin_theta = torch.linalg.vector_norm(nodes[:, :2], dim=-1)  # (n_nodes,)
+    at_pole = sin_theta < tolerance
+
+    if bool(at_pole.any()):
+        raise ValueError(
+            f"{int(at_pole.sum())} node(s) lie at a pole, where the coordinate "
+            "frame (e_theta, e_phi) is undefined. Use a grid without pole "
+            "nodes ('legendre-gauss') or build_tangent_frames."
+        )
+
+    cos_phi = nodes[:, 0] / sin_theta  # (n_nodes,)
+    sin_phi = nodes[:, 1] / sin_theta  # (n_nodes,)
+    cos_theta = nodes[:, 2]  # (n_nodes,)
+
+    e_theta = torch.stack(  # (n_nodes, 3)
+        (cos_theta * cos_phi, cos_theta * sin_phi, -sin_theta),
+        dim=-1,
+    )
+    e_theta = e_theta / torch.linalg.vector_norm(e_theta, dim=-1, keepdim=True)
+
+    e_phi = torch.stack(  # (n_nodes, 3)
+        (-sin_phi, cos_phi, torch.zeros_like(sin_phi)),
+        dim=-1,
+    )
+    e_phi = e_phi / torch.linalg.vector_norm(e_phi, dim=-1, keepdim=True)
+
+    return torch.stack(  # (n_nodes, 3, 2)
+        (e_theta, e_phi),
+        dim=-1,
+    ).contiguous()
+
+
 def _validate_sphere_nodes(
     nodes: Tensor,  # (n_nodes, 3)
 ) -> None:

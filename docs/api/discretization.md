@@ -72,6 +72,11 @@ into its tangent plane to give `e_1`, and `e_2 = p x e_1`. No continuous
 tangent frame field exists on the sphere, so the choice is discontinuous; the
 discontinuities are changes of gauge, to which a gauge-equivariant layer is
 insensitive.
+[`build_coordinate_frames`][gm_attention.discretization.frames.build_coordinate_frames]
+gives the spherical-coordinate frames `(e_theta, e_phi)` instead, which are
+covariant under rotations about the polar axis and undefined at the poles; a
+tensor-product grid in this gauge folds along longitude (see
+[Tensor-grid stencils](#tensor-grid-stencils)).
 [`rotate_tangent_frames`][gm_attention.discretization.frames.rotate_tangent_frames]
 applies `E_i' = E_i r(theta_i)`, which sends the coordinates `x` of a tangent
 vector to `r(theta_i)^T x`; the corresponding transformation of feature
@@ -174,6 +179,32 @@ consistent, but cannot check that the two were computed in the same gauge;
 the grid, frames, coverage edges and every cached subset.
 
 ::: gm_attention.discretization.discretization
+
+## Tensor-grid stencils
+
+On a tensor-product grid in the coordinate gauge, a rotation about the polar
+axis by a multiple of `2 pi / n_longitude` is an isometry that maps the grid
+onto itself and every frame onto a frame, so the geometry of an edge
+`(ho, wo) <- (hi, wi)` depends only on `(ho, hi, (wi - wo) mod n_longitude)`.
+[`build_tensor_grid_stencil`][gm_attention.discretization.stencil.build_tensor_grid_stencil]
+folds the edges within a support radius into a
+[`TensorGridStencil`][gm_attention.discretization.stencil.TensorGridStencil]:
+one representative edge per `(ho, hi, dw)` class (the edges whose target has
+longitude `0`), the class's source row and longitude offset, and the circular
+longitude arcs each `(ho, hi)` pair forms. It checks the fold against every
+edge of the full geometry and raises where it fails, as it does for the
+default frames or for a grid with pole nodes; the `"legendre-gauss"` grid has
+none, and
+[`build_tensor_grid_discretization`][gm_attention.discretization.stencil.build_tensor_grid_discretization]
+builds it in the coordinate gauge. A layer on the dense
+`(..., n_latitude, n_longitude, channels)` layout then reads the source of
+slot `s` at target `(ho, wo)` from `(source_row[s], (wo + offset[s]) mod
+n_longitude)`, the access pattern of torch-harmonics' neighbourhood kernels,
+with `n_longitude` times fewer geometry rows than the edge set;
+[Fixed-grid reference](nn.md#fixed-grid-reference) evaluates the attention
+this way.
+
+::: gm_attention.discretization.stencil
 
 ## Icosphere grids and multiresolution
 

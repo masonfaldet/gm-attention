@@ -17,8 +17,8 @@ relative to the working directory.
 | directory | subject |
 |---|---|
 | `tests/representations` | the irreps of $SO(2)$ and their complex form, field types and feature fields, the gauge-transformation law; the dense reference implementations themselves |
-| `tests/discretization` | the grids and their quadrature, tangent frames and regauging, edge geometry (log map, transport angles, angular harmonics, the cutoff rule), the icosphere and equiangular hierarchies |
-| `tests/nn` | every layer and block: gauge equivariance, the steerable kernel and the intertwiner against the dense references in `tests/support`, the factored kernel against the per-edge readout, the fused kernels against the pure-PyTorch path, chunked evaluation against unchunked |
+| `tests/discretization` | the grids and their quadrature, tangent frames and regauging, edge geometry (log map, transport angles, angular harmonics, the cutoff rule), the icosphere and equiangular hierarchies, the coordinate frames and the per-row stencil of a tensor-product grid against its edge set |
+| `tests/nn` | every layer and block: gauge equivariance, the steerable kernel and the intertwiner against the dense references in `tests/support`, the factored kernel against the per-edge readout, the fused kernels against the pure-PyTorch path, chunked evaluation against unchunked, the dense fixed-grid attention against the graph path |
 | `tests/training` | the training loop, checkpointing and bit-for-bit resumption, the losses and metrics of the paper, logging, seeding |
 | `tests/data` | the solver-synthesized shallow-water data: determinism per index and seed, agreement with the solver's own synthesis |
 | `tests/experiments` | the shallow-water models and protocol (training, transfer across grids, spectral comparison, rollouts) and the segmentation model, data and training, each through a tiny end-to-end run of the bundle's configuration |

@@ -138,6 +138,29 @@ in the convolution; in training mode each chunk is recomputed in the backward un
 
 ::: gm_attention.nn.attention
 
+## Fixed-grid reference
+
+The attention evaluated on a fixed tensor-product grid from a
+[`TensorGridStencil`][gm_attention.discretization.stencil.TensorGridStencil]
+rather than from the edge set, on the dense `(..., n_latitude, n_longitude,
+channels)` layout.
+[`steerable_kernel_matrices`][gm_attention.nn.fixed_grid.steerable_kernel_matrices]
+turns the value kernel into one `(d_out, d_in)` matrix per slot from one
+evaluation of its radial coefficients, phases and radial powers per slot, the
+kernel's block formula assembled into a real matrix, so the radial MLP runs
+`n_longitude` times less often than per edge (the tests check the matrices
+against the kernel's forward on the basis vectors of its input type);
+[`attention_fixed_grid`][gm_attention.nn.fixed_grid.attention_fixed_grid]
+and [`mhsa_fixed_grid`][gm_attention.nn.fixed_grid.mhsa_fixed_grid] gather
+each output row's slots along longitude, transport the keys by the slot's
+phase, take the softmax over the slots and apply the slot matrices under the
+attention weights. They agree with the graph path on the same discretization
+to summation order, gradients included, and are exactly equivariant to the
+grid's own rotations (a longitude shift). They are the reference a stencil
+kernel on this layout has to reproduce, not a fast path.
+
+::: gm_attention.nn.fixed_grid
+
 ## Nonlinearities
 
 [`SO2ScalarGatedNonlinearity`][gm_attention.nn.nonlinearities.SO2ScalarGatedNonlinearity] is the one
