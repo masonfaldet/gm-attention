@@ -102,6 +102,14 @@ class RunResult:
         return out
 
 
+def sample_record(sample: SampleScore) -> dict[str, Any]:
+    """``sample`` as a JSON row, a non-finite metric (a panorama with no
+    valid pixel has no IoU) written as ``null`` as ``class_iou`` already
+    does: the JSON is strict (``allow_nan=False``)."""
+    return {key: None if isinstance(value, float) and not math.isfinite(value) else value
+            for key, value in asdict(sample).items()}
+
+
 def read_protocol(run_dir: Path) -> dict[str, Any]:
     path = run_dir / PROTOCOL_FILENAME
     if not path.is_file():
@@ -343,9 +351,17 @@ def run_progress(run_dir: Path) -> RunProgress:
     ``last.pt`` is unfinished."""
     protocol = read_protocol(run_dir)
     max_epochs = int(protocol["training_config"]["max_epochs"])
-    finished = any(entry.get("event") == "finished" for entry in protocol.get("history", []))
     last = run_dir / "checkpoints" / "last.pt"
     run_epoch = checkpoint_epoch(run_dir, "last") if last.is_file() else -1
+    # A finished event counts only while it describes this last.pt under this
+    # length; one recorded before an extension would pass an interrupted run
+    # off as complete. An entry predating these fields is taken at its word.
+    finished = any(
+        entry.get("event") == "finished"
+        and int(entry.get("max_epochs", max_epochs)) == max_epochs
+        and int(entry.get("epochs", run_epoch + 1)) == run_epoch + 1
+        for entry in protocol.get("history", [])
+    )
     complete = last.is_file() and (finished or run_epoch + 1 >= max_epochs)
     return RunProgress(run_epoch=run_epoch, max_epochs=max_epochs, finished=finished, complete=complete)
 
@@ -474,7 +490,7 @@ def run_evaluation(
         payload["arms"][arm] = {
             "summary": aggregate(results),
             "runs": [
-                {**asdict(r), "samples": [asdict(s) for s in r.samples], "summary": r.summary()}
+                {**asdict(r), "samples": [sample_record(s) for s in r.samples], "summary": r.summary()}
                 for r in results
             ],
         }

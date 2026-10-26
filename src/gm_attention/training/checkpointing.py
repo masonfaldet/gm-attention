@@ -214,6 +214,21 @@ class CheckpointManager:
         elif self.monitor in metadata.metrics:
             self._best_value = metadata.metrics[self.monitor]
 
+    def improves(self, metrics: dict[str, float]) -> bool:
+        """Whether ``metrics``' monitored value beats the best so far (any
+        value beats none), without recording it: what :meth:`save` decides
+        for the same metrics, for a caller whose checkpointed state depends
+        on that decision (the early-stopping counter)."""
+        if self.monitor not in metrics:
+            raise KeyError(
+                f"Monitored metric {self.monitor!r} not found in metrics "
+                f"{sorted(metrics)}."
+            )
+        value = metrics[self.monitor]
+        return self._best_value is None or (
+            value < self._best_value if self.mode == "min" else value > self._best_value
+        )
+
     def save(
         self,
         *,
@@ -249,19 +264,9 @@ class CheckpointManager:
 
         # Decided before anything is written, so last.pt records the bar this
         # epoch set and a resume restores it.
-        is_best = False
-        if metrics and update_best:
-            if self.monitor not in metrics:
-                raise KeyError(
-                    f"Monitored metric {self.monitor!r} not found in metrics "
-                    f"{sorted(metrics)}."
-                )
-            value = metrics[self.monitor]
-            is_best = self._best_value is None or (
-                value < self._best_value if self.mode == "min" else value > self._best_value
-            )
-            if is_best:
-                self._best_value = value
+        is_best = bool(metrics) and update_best and self.improves(metrics)
+        if is_best:
+            self._best_value = metrics[self.monitor]
 
         def write(name: str) -> None:
             save_checkpoint(

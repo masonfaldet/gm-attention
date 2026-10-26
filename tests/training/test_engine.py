@@ -907,6 +907,10 @@ def test_early_stopping_counter_survives_resume(tmp_path: Path) -> None:
     )
     first.fit(batches, max_epochs=3, val_loader=batches)
     assert first.epochs_without_improvement == 2  # epoch 0 set the bar; 1 and 2 did not beat it
+    # last.pt records the counter as of the end of its epoch, epoch 2's
+    # bad result included: saved one epoch stale, every resume would hand
+    # the run back an epoch of patience.
+    assert torch.load(tmp_path / "last.pt", weights_only=False)["epochs_without_improvement"] == 2
 
     resumed = Trainer(
         model,
@@ -920,7 +924,7 @@ def test_early_stopping_counter_survives_resume(tmp_path: Path) -> None:
         batches, max_epochs=10, val_loader=batches, resume_from=tmp_path / "last.pt"
     )
 
-    # It must stop almost immediately (one more bad epoch reaches patience),
-    # not run all the way to epoch 10 with a reset counter.
+    # One more bad epoch reaches patience: it stops at epoch 3, as the
+    # uninterrupted run would have, not one epoch later or at epoch 10.
     assert resumed.epochs_without_improvement == 3
-    assert resumed.epoch < 9
+    assert resumed.epoch == 3

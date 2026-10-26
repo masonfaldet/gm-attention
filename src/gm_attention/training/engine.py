@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import torch
 from torch import Tensor, nn
@@ -342,7 +342,17 @@ class Trainer:
                     self.scheduler.step(monitored[self.scheduler_metric])  # type: ignore[arg-type]
 
             if self.checkpoint_manager is not None:
-                is_best = self.checkpoint_manager.save(
+                # The counter is advanced before the save, so last.pt records
+                # it as of the end of this epoch: saved stale, every resume
+                # would hand the run back one epoch of patience.
+                counting = self.early_stopping_patience is not None and monitored is not None
+                if counting:
+                    assert monitored is not None
+                    self.epochs_without_improvement = (
+                        0 if monitored and self.checkpoint_manager.improves(monitored)
+                        else self.epochs_without_improvement + 1
+                    )
+                self.checkpoint_manager.save(
                     model=self.model,
                     optimizer=self.optimizer,
                     scheduler=self.scheduler,
@@ -355,12 +365,8 @@ class Trainer:
                     epochs_without_improvement=self.epochs_without_improvement,
                 )
 
-                if self.early_stopping_patience is not None and monitored is not None:
-                    self.epochs_without_improvement = (
-                        0 if is_best else self.epochs_without_improvement + 1
-                    )
-                    if self.epochs_without_improvement >= self.early_stopping_patience:
-                        break
+                if counting and self.epochs_without_improvement >= cast(int, self.early_stopping_patience):
+                    break
 
     def _run_epoch(self, loader: Iterable[Any], *, training: bool) -> dict[str, float]:
         self.model.train(training)

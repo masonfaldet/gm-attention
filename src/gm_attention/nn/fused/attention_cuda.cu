@@ -77,8 +77,9 @@ __global__ void __launch_bounds__(THREADS) softmax_forward_kernel(Args<T> a, int
   __syncthreads();
   T loc[MAX_H];
   for (int h = 0; h < H; ++h) loc[h] = lowest<T>();
-  for (int t = threadIdx.x; t < deg; t += THREADS)
-    for (int h = 0; h < H; ++h) loc[h] = lw[t * H + h] > loc[h] ? lw[t * H + h] : loc[h];
+  for (int t = threadIdx.x; t < deg; t += THREADS)  // in-window edges only, as the CPU driver
+    if (a.inside[e0 + t])
+      for (int h = 0; h < H; ++h) loc[h] = lw[t * H + h] > loc[h] ? lw[t * H + h] : loc[h];
   block_reduce(loc, H, red, MaxOp<T>());
   T m[MAX_H];
   for (int h = 0; h < H; ++h) {

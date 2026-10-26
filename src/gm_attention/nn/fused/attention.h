@@ -303,7 +303,8 @@ void node_softmax_forward(const Args<T>& a, int64_t i, T* scratch) {
   }
   for (int h = 0; h < H; ++h) {
     T m = lowest<T>();
-    for (int t = 0; t < deg; ++t) m = scratch[t * H + h] > m ? scratch[t * H + h] : m;
+    for (int t = 0; t < deg; ++t)  // in-window edges only: a masked edge's bias is merely very negative
+      if (a.inside[e0 + t] && scratch[t * H + h] > m) m = scratch[t * H + h];
     T sum = T(0);
     for (int t = 0; t < deg; ++t) {
       const T u = a.inside[e0 + t] ? std::exp(scratch[t * H + h] - m) : T(0);

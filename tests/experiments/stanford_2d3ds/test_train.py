@@ -22,6 +22,8 @@ from experiments.stanford_2d3ds.evaluation import (
     evaluate_run,
     hydra_config_drift,
     run_evaluation,
+    run_progress,
+    sample_record,
 )
 from experiments.stanford_2d3ds.train import (
     MONITOR_METRIC,
@@ -311,8 +313,23 @@ def test_a_tiny_run_trains_writes_its_protocol_and_evaluates(dataset_file: Path,
     for directory, finished in ((run, True), (unfinished, False)):
         record = json.loads((directory / PROTOCOL_FILENAME).read_text())
         record["training_config"]["max_epochs"] = 50
-        record["history"] = [e for e in record["history"] if finished or e["event"] != "finished"]
+        record["history"] = [dict(e, max_epochs=50) if e["event"] == "finished" else e
+                             for e in record["history"] if finished or e["event"] != "finished"]
         (directory / PROTOCOL_FILENAME).write_text(json.dumps(record, indent=2) + "\n")
+    # A finished event recorded under another length (the run extended
+    # after it, then interrupted) or at another last.pt says nothing about
+    # this one: seed 6 finished at its old length and was extended to 50.
+    extended = tmp_path / "seed6"
+    shutil.copytree(unfinished, extended)
+    record = json.loads((extended / PROTOCOL_FILENAME).read_text())
+    stale = {"event": "finished", "epochs": result.epoch + 1, "max_epochs": result.epoch + 1}
+    record["history"] = [*record["history"], stale]
+    (extended / PROTOCOL_FILENAME).write_text(json.dumps(record, indent=2) + "\n")
+    assert not run_progress(extended).complete and run_progress(extended).finished is False
+    record["history"][-1] = dict(stale, max_epochs=50, epochs=result.epoch)  # under this length, at another last.pt
+    (extended / PROTOCOL_FILENAME).write_text(json.dumps(record, indent=2) + "\n")
+    assert not run_progress(extended).complete
+    shutil.rmtree(extended)
     headless = tmp_path / "seed9"
     shutil.copytree(run, headless)
     (headless / "checkpoints" / "last.pt").unlink()
@@ -345,6 +362,9 @@ def test_a_tiny_run_trains_writes_its_protocol_and_evaluates(dataset_file: Path,
     poisoned = dataclasses.replace(result, samples=[dataclasses.replace(result.samples[0], pixel_accuracy=float("nan")), *result.samples[1:]])
     assert poisoned.summary()["pixel_accuracy_nonfinite"] == 1 and math.isfinite(poisoned.summary()["pixel_accuracy_mean"])
     assert aggregate([poisoned])["pixel_accuracy_nonfinite"] == 1
+    record = sample_record(poisoned.samples[0])
+    assert record["pixel_accuracy"] is None and record["iou"] == poisoned.samples[0].iou
+    json.dumps(record, allow_nan=False)  # the evaluation JSON is strict
 
 
 def test_the_arm_builds_on_icosphere_levels_with_the_chains_radii(dataset_file: Path) -> None:

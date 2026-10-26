@@ -656,6 +656,37 @@ def test_edges_outside_the_window_contribute_exactly_zero() -> None:
     assert torch.allclose(at_cutoff.to_flat(), self_only.to_flat(), atol=1e-12)
 
 
+def test_an_edge_outside_the_window_never_sets_the_softmax_shift() -> None:
+    """In float32 an out-of-window edge's log-weight is its score plus
+    log(tiny), only about -87: an edge at the cutoff whose score beats the
+    self-loop's by more than that would win the per-target max and
+    underflow every in-window weight to 0/0. The max is over the window."""
+    field_type = SO2FieldType({0: 1})
+    attn = SO2Attention(field_type, field_type, field_type, cutoff=1.0, window="quartic", bias=False)
+    with torch.no_grad():
+        attn.query.weight["0"].fill_(1.0)
+        attn.key.weight["0"].fill_(1.0)
+
+    def edges(target: list[int], source: list[int], distances: list[float]) -> EdgeGeometry:
+        n = len(target)
+        return _synthetic_edges(
+            torch.tensor(target), torch.tensor(source), n_nodes=2,
+            distances=torch.tensor(distances), polar_angles=torch.zeros(n), transport_angles=torch.zeros(n),
+            tangent_quadrature_weights=torch.ones(n), max_frequency=2,
+        )
+
+    # Scores: self-loop 15 * 15 = 225, the edge at the cutoff 15 * 30 = 450.
+    x = SO2FeatureField(field_type, {0: torch.tensor([[15.0], [30.0]], requires_grad=True)})
+    with_boundary = attn(x, edges([0, 0, 1], [0, 1, 1], [0.0, 1.0, 0.0]))
+    self_only = attn(x, edges([0, 1], [0, 1], [0.0, 0.0]))
+
+    assert torch.isfinite(with_boundary.to_flat()).all()
+    assert torch.allclose(with_boundary.to_flat(), self_only.to_flat())
+    with_boundary.to_flat().sum().backward()
+    assert torch.isfinite(x[0].grad).all()
+    assert all(p.grad is None or torch.isfinite(p.grad).all() for p in attn.parameters())
+
+
 # --------------------------------------------------------------------------
 # SO2Attention: autograd
 # --------------------------------------------------------------------------

@@ -371,3 +371,39 @@ def test_chunk_geometries_are_views_of_the_parent_and_nothing_accumulates(fused_
         assert g.row_ptr is not parent.row_ptr and g.max_degree == int((chunk.row_ptr[1:] - chunk.row_ptr[:-1]).max())
         torch.testing.assert_close(g.aggregation_weights(True, 1e-6), parent.aggregation_weights(True, 1e-6)[first:last])
         assert len(fused_attention._GEOMETRIES) == 1
+
+
+def test_the_softmax_op_takes_its_shift_over_the_window_alone(fused_cpu: list[str]) -> None:
+    """The eager path's float32 boundary case through the driver: an edge at
+    the cutoff (quartic window 0) whose score beats the self-loop's by more
+    than -log(tiny) ~ 87 must not set the per-target shift, or every
+    in-window weight underflows to 0/0."""
+    from gm_attention.discretization.edge_geometry import EdgeGeometry
+    from gm_attention.representations import so2
+
+    field_type = SO2FieldType({0: 1})
+    attn = SO2Attention(field_type, field_type, field_type, cutoff=1.0, window="quartic", bias=False)
+    with torch.no_grad():
+        attn.query.weight["0"].fill_(1.0)
+        attn.key.weight["0"].fill_(1.0)
+    target, source = torch.tensor([0, 0, 1]), torch.tensor([0, 1, 1])
+    distances, zeros = torch.tensor([0.0, 1.0, 0.0]), torch.zeros(3)
+    edges = EdgeGeometry(
+        edge_index=torch.stack((target, source)), row_ptr=torch.tensor([0, 2, 3]),
+        log_coordinates=torch.stack((distances, zeros), dim=-1), distances=distances, polar_angles=zeros,
+        transport_angles=zeros, tangent_quadrature_weights=torch.ones(3),
+        angular_phases=so2.phase_powers(zeros, 2), transport_phases=so2.phase_powers(zeros, 2),
+    )
+    x = SO2FeatureField(field_type, {0: torch.tensor([[15.0], [30.0]], requires_grad=True)})  # scores 225 and 450
+    output = attn(x, edges).to_flat()
+    assert fused_cpu == ["softmax_head"]
+    assert torch.isfinite(output).all()
+    assert torch.allclose(output[0], torch.tensor([15.0]) * attn.value(  # the self-loop's message alone
+        SO2FeatureField(field_type, {0: torch.tensor([[1.0]])}), _self_loop(edges)).to_flat()[0])
+    output.sum().backward()
+    assert torch.isfinite(x[0].grad).all()
+
+
+def _self_loop(edges):
+    """The first edge of ``edges`` (node 0's self-loop) alone."""
+    return edges.select(torch.tensor([0]), n_nodes=1)

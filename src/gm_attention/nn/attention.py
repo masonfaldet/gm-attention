@@ -320,14 +320,17 @@ class SO2Attention(nn.Module):
             + torch.log(edges.tangent_quadrature_weights.clamp_min(tiny))
         )  # (n_edges,)
 
-        # clamp_min keeps a masked edge's exponent finite (no -inf - -inf); the
-        # hard zero below enforces compact support. The shift is detached: the
-        # softmax is invariant to it, so its gradient is exactly zero.
+        # Compact support: an edge outside the window is -inf before the max
+        # and the exp. log(tiny) alone is only ~-87 in float32, so such an edge
+        # with a large score could win the max and underflow every in-window
+        # weight to 0/0; masking before the exp (not a `where` after it) keeps
+        # the backward free of 0 * inf. The max is finite: every target has its
+        # self-loop inside the window. The shift is detached: the softmax is
+        # invariant to it, so its gradient is exactly zero.
+        log_weight = log_weight.masked_fill(~inside_window, float("-inf"))
         node_max = scatter_max_to_nodes(log_weight, edges.row_ptr).detach()
-        unnormalized_weight = torch.where(
-            inside_window,
-            torch.exp(log_weight - node_max.index_select(0, edges.target_index)),
-            torch.zeros_like(log_weight),
+        unnormalized_weight = torch.exp(
+            log_weight - node_max.index_select(0, edges.target_index)
         )  # (n_edges,)
 
         # Every node carries its own self-loop with strictly positive weight
@@ -844,12 +847,10 @@ def _softmax_weights(heads: Sequence[SO2Attention], queries: SO2FeatureField, ke
         torch.log(window.clamp_min(tiny))
         + torch.log(edges.tangent_quadrature_weights.clamp_min(tiny))
     ).unsqueeze(-1)  # (n_edges, n_heads)
-    node_max = scatter_max_to_nodes(log_weight, edges.row_ptr).detach()  # (n_nodes, n_heads); detached as in _attend
-    unnormalized_weight = torch.where(
-        inside_window,
-        torch.exp(log_weight - node_max.index_select(0, edges.target_index)),
-        torch.zeros_like(log_weight),
-    )
+    # Edges outside the window are -inf before the max and the exp; see _attend.
+    log_weight = log_weight.masked_fill(~inside_window, float("-inf"))
+    node_max = scatter_max_to_nodes(log_weight, edges.row_ptr).detach()  # (n_nodes, n_heads)
+    unnormalized_weight = torch.exp(log_weight - node_max.index_select(0, edges.target_index))
     normalization = scatter_add_to_nodes(unnormalized_weight, edges.row_ptr)  # (n_nodes, n_heads)
     return unnormalized_weight / normalization.index_select(0, edges.target_index)  # (n_edges, n_heads)
 

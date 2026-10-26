@@ -53,11 +53,14 @@ def training_loss(runs: list[dict[str, Any]]) -> float | None:
 
 
 def per_image(entry: dict[str, Any], metric: str) -> dict[int, float]:
-    """One arm's seed-averaged score per report image, keyed by dataset index."""
+    """One arm's seed-averaged score per report image, keyed by dataset index;
+    a seed with no score on an image (``null``: no valid pixel) is left out,
+    and an image no seed scored is absent."""
     totals: dict[int, list[float]] = {}
     for run in entry["runs"]:
         for sample in run["samples"]:
-            totals.setdefault(int(sample["index"]), []).append(float(sample[metric]))
+            if sample[metric] is not None:
+                totals.setdefault(int(sample["index"]), []).append(float(sample[metric]))
     return {index: statistics.fmean(values) for index, values in totals.items()}
 
 
