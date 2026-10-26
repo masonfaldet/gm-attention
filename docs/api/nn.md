@@ -157,9 +157,133 @@ phase, take the softmax over the slots and apply the slot matrices under the
 attention weights. They agree with the graph path on the same discretization
 to summation order, gradients included, and are exactly equivariant to the
 grid's own rotations (a longitude shift). They are the reference a stencil
-kernel on this layout has to reproduce, not a fast path.
+kernel on this layout has to reproduce, not a fast path; the
+[stencil path](#stencil-path) below is that kernel in PyTorch.
 
 ::: gm_attention.nn.fixed_grid
+
+## Stencil path
+
+The same layers on the same layout with every output row evaluated at once.
+A [`StencilPlan`][gm_attention.nn.stencil_plan.StencilPlan]
+([`build_stencil_plan`][gm_attention.nn.stencil_plan.build_stencil_plan])
+groups the rows of a stencil into a few buckets of similar slot count (the
+count is skewed on a Gauss-Legendre grid: a cap of fixed radius holds a
+handful of neighbours at the equator and whole latitude circles near the
+poles), pads every row of a bucket to the bucket's width with a *phantom
+slot* whose table entries are neutral (a zero matrix, a `-inf` softmax bias),
+and tabulates the flat source node of every `(row, target longitude,
+position)`. The partition minimizes the padded slot count over the degree-
+sorted rows (a dynamic program; eight buckets leave a few percent of padding
+where one bucket would pad two thirds), and every shape a layer sees is
+fixed once the plan is built. Each layer then has two stages:
+
+- a *tables* stage that evaluates what depends on the parameters but not on
+  the field, once per slot:
+  [`attention_tables`][gm_attention.nn.stencil_attention.attention_tables]
+  (the value kernel's matrices, the window and quadrature bias, the cosine
+  and sine of each attention frequency's transport angle) and
+  [`convolution_tables`][gm_attention.nn.stencil_convolution.convolution_tables]
+  (the kernel's matrices times window times quadrature weight, the
+  per-copy tables of a depthwise kernel through
+  [`depthwise_kernel_matrices`][gm_attention.nn.stencil_convolution.depthwise_kernel_matrices],
+  the per-row window mass of a normalized layer). The kernel's matrices come
+  from [`steerable_slot_matrices`][gm_attention.nn.stencil_kernel.steerable_slot_matrices]:
+  the values of the reference's `steerable_kernel_matrices` (to rounding;
+  the tests compare the two at float64 precision), assembled not block by
+  block but by phasing every complex column of the radial head's output in
+  one complex multiply and gathering the one or two signed terms of every
+  matrix entry with two `torch.gather` calls, from a plan built once per
+  type pair; it also writes the transposed layout, the phantom row and a
+  convolution's per-slot weight directly. This is the only complex
+  arithmetic, on `n_slots` rows; under `torch.no_grad()` with fixed
+  parameters the tables can be reused across forwards.
+- a dense stage in real arithmetic with static shapes,
+  [`attend`][gm_attention.nn.stencil_attention.attend] and
+  [`aggregate`][gm_attention.nn.stencil_convolution.aggregate]: per bucket
+  one `index_select` gathers every row's whole neighbourhood, the scores are
+  broadcast products of the gathered keys against the queries (the transport
+  `<q, rho(g_s) k>` is `cos(f gamma_s) <q, k> + sin(f gamma_s) <q_perp, k>`,
+  so the keys are never rotated), the softmax runs over the slot axis, and
+  the aggregation is one matmul of the (attention-weighted) gathered sources
+  `(rows, n_longitude, width * d_in)` against the stacked slot matrices
+  `(rows, width * d_in, d_out)`: the contraction over slots and input
+  channels is a single GEMM, and no per-edge message tensor exists. A
+  depthwise kernel contracts per copy, with one real `2 x 2` block per slot
+  and non-scalar copy. Both compile with `torch.compile(fullgraph=True)`.
+
+[`stencil_attention`][gm_attention.nn.stencil_attention.stencil_attention],
+[`stencil_mhsa`][gm_attention.nn.stencil_attention.stencil_mhsa] (every head
+in one pass over stacked queries, keys and slot matrices) and
+[`stencil_convolution`][gm_attention.nn.stencil_convolution.stencil_convolution]
+(general or depthwise kernel, both windows, `self_interaction` and
+`normalize`) agree with the graph path and the reference to summation order,
+gradients included, and are equivariant to longitude shifts to the bit. The
+layers' own `forward` reaches them: `layer(x, plan=plan)`, or the plan in
+place of the edges, `layer(x, plan)`, which is what a block forwards to its
+mixer, so `SO2TransformerBlock(x, plan)` runs its mixer on the stencil; the
+chunked entry points stay on the graph path and refuse a plan. A model's
+layers run at several cutoffs on one grid, so
+[`StencilPlans`][gm_attention.nn.stencil_plan.StencilPlans] holds one plan
+per cutoff, keyed as a `SphericalDiscretization` keys its radius subsets, and
+a layer given the container resolves the plan at its own cutoff: a block with
+an attention radius and a mix radius hands the container to both, as it hands
+a discretization.
+[`build_tensor_grid_geometry`][gm_attention.nn.stencil_plan.build_tensor_grid_geometry]
+builds a Gauss-Legendre grid's discretization, windows prepared at every
+cutoff, and its plans side by side, so `model(x, discretization)` and
+`model(x, plans)` evaluate the same function; the shallow-water
+`GmAttentionSingleLevel` takes either, and the segmentation hierarchy
+(`build_segformer_hierarchy(..., stencil_plans=True)`) carries each
+Gauss-Legendre stage level's plans in `TensorGridLevel.plans`, on which the
+GM SegFormer runs that stage's blocks and readout while the merges and
+interpolations stay on their bipartite edges (`tests/experiments`).
+`scripts/profile_single_level_paths.py` and `scripts/profile_segformer_paths.py`
+time the two models through the native, fused and stencil paths and their
+mixes ([Profiling the paths](../development/testing.md#profiling-the-paths)). The
+per-edge arithmetic of the steerable value kernel is unchanged, about thirty
+times that of torch-harmonics' neighbourhood S2 transformer; what the path
+removes is the per-edge geometry, radial MLP, gather and scatter of the graph
+path and the per-row launches of the reference. CPU times on an Apple M5 Pro
+(six threads, float32, the released field type `16 (rho_0 + rho_1 + rho_2)`,
+two heads, the released cutoffs `0.2757` for the attention and `0.1396` for
+the convolutions, best of a few runs):
+
+| layer, grid | graph path | per-row reference | stencil path | of which tables | dense stage, eager and `torch.compile` |
+|---|---|---|---|---|---|
+| MHSA, 32x64 | 407 ms | 67 ms | 25 ms | 9 ms | 16 ms, 10 ms |
+| MHSA, 64x128 | 6271 ms (chunked, 1024 targets) | 476 ms | 214 ms | 64 ms | 145 ms, 85 ms |
+| convolution, 32x64 | 99 ms | | 5.4 ms | 3.6 ms | 1.6 ms, 3.0 ms |
+| convolution, 64x128 | 1825 ms | | 33 ms | 19 ms | 14 ms, 16 ms |
+| depthwise, normalized, 32x64 | 5.8 ms | | 5.2 ms | 0.8 ms | 4.4 ms, 3.0 ms |
+| depthwise, normalized, 64x128 | 53 ms | | 18 ms | 4 ms | 14 ms, 14 ms |
+
+Forward and backward together, graph path / reference / stencil path: MHSA
+765 / 189 / 81 ms at 32x64 and 20346 / 1411 / 661 ms at 64x128;
+convolution 223 / 14 ms and 3800 / 107 ms; depthwise 12 / 13 ms and
+114 / 43 ms. The unchunked graph path at 64x128 did not complete on 48 GB
+(its per-edge coefficient tensors), so the attention's graph path is timed as
+the released configurations train it, `forward_chunked` with 1024 targets per
+chunk.
+
+At 64x128 the attention's dense stage runs at the GEMM roofline of the value
+contraction, and the tables (the radial MLP and the gather assembly, two
+heads) are a third of the eager forward.
+[`stencil_attention_triton`][gm_attention.nn.stencil_attention_triton] holds
+a forward kernel in torch-harmonics' style (one program per batch, output row
+and longitude tile; an online softmax over the slots; the slot matrices read
+from the table): it was written on a machine without a GPU and is
+**untested**.
+
+::: gm_attention.nn.stencil_plan
+
+::: gm_attention.nn.stencil_kernel
+
+::: gm_attention.nn.stencil_attention
+
+::: gm_attention.nn.stencil_convolution
+
+::: gm_attention.nn.stencil_attention_triton
 
 ## Nonlinearities
 

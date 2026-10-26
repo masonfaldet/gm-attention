@@ -37,6 +37,7 @@ from gm_attention.nn.convolution import SO2Convolution, WindowKind
 from gm_attention.nn.kernels import RadialBasisKind
 from gm_attention.nn.linear import SO2Linear
 from gm_attention.nn.normalization import SO2LayerNorm
+from gm_attention.nn.stencil_plan import StencilPlans
 from gm_attention.nn.stochastic_depth import SO2DropPath
 from gm_attention.representations.field_type import (
     SO2FeatureField,
@@ -721,9 +722,11 @@ class GmSegformer(nn.Module):
         return module(*args)  # type: ignore[no-any-return]
 
     def _run_block(
-        self, block: nn.Module, x: SO2FeatureField, discretization: SphericalDiscretization
+        self, block: nn.Module, x: SO2FeatureField, local: SphericalDiscretization | StencilPlans
     ) -> SO2FeatureField:
-        return self._rematerialize(block, x, discretization)
+        """One block on its level's discretization, or on its stencil plans
+        (``TensorGridLevel.local``), each layer resolving its own radius."""
+        return self._rematerialize(block, x, local)
 
     def encode(
         self, x: SO2FeatureField, hierarchy: TensorGridHierarchy
@@ -758,7 +761,7 @@ class GmSegformer(nn.Module):
             if str(i) in self.gravity_conditioners or self.gravity_projection_sites.get(i) == "stage":
                 feature = self._condition_gravity(i, feature, level)
             for block in cast(nn.ModuleList, self.stages[i]):
-                feature = self._run_block(block, feature, level.discretization)
+                feature = self._run_block(block, feature, level.local)
             feature = self.stage_norms[i](feature)
             features.append(feature)
         return features
@@ -829,7 +832,7 @@ class GmSegformer(nn.Module):
             level = hierarchy.levels[i + 1]
             if level.discretization is None:
                 raise ValueError(f"hierarchy level {i + 1} carries no same-grid discretization.")
-            readout = self._rematerialize(self.upsample_linears[i], feature, level.discretization)
+            readout = self._rematerialize(self.upsample_linears[i], feature, level.local)
             if self.gravity_readout:
                 readout = self._read_against_gravity(i, readout, feature, level)
             projected.append(readout)
@@ -894,7 +897,10 @@ class GmSegformer(nn.Module):
         hierarchy
             Built for this model's radii (``geometry.build_segformer_hierarchy``);
             its per-level radii must match the cutoffs the model was
-            constructed with.
+            constructed with. A level with stencil plans (``stencil_plans=True``
+            there) runs its blocks and readout on the dense fixed-grid
+            layout, the same function to summation order; the merges and
+            interpolations stay on their bipartite edges.
         """
         return self.decode(self.encode(x, hierarchy), hierarchy, x)
 

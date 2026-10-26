@@ -40,6 +40,7 @@ from gm_attention.nn.kernels import (
     transport_field,
 )
 from gm_attention.nn.linear import SO2Linear
+from gm_attention.nn.stencil_plan import StencilPlan, StencilPlans, split_edges_and_plan
 from gm_attention.representations import so2
 from gm_attention.representations.field_type import (
     SO2FeatureField,
@@ -66,6 +67,8 @@ def _resolve_edges(
     edges: EdgeGeometry | SphericalDiscretization,
     cutoff: float,
 ) -> EdgeGeometry:
+    if isinstance(edges, (StencilPlan, StencilPlans)):
+        raise TypeError("A StencilPlan evaluates the layer through forward only; chunked evaluation runs on the graph path.")
     if isinstance(edges, SphericalDiscretization):
         return edges.edges_within(cutoff)
 
@@ -219,7 +222,9 @@ class SO2Attention(nn.Module):
     def forward(
         self,
         x: SO2FeatureField,
-        edges: EdgeGeometry | SphericalDiscretization,
+        edges: EdgeGeometry | SphericalDiscretization | StencilPlan | StencilPlans | None = None,
+        *,
+        plan: StencilPlan | StencilPlans | None = None,
     ) -> SO2FeatureField:
         """Attend over each node's incoming neighborhood.
 
@@ -229,13 +234,28 @@ class SO2Attention(nn.Module):
             Node-level feature field of type ``field_type_in``.
         edges
             Either an ``EdgeGeometry``, or a ``SphericalDiscretization``,
-            from which ``edges_within(self.cutoff)`` is taken.
+            from which ``edges_within(self.cutoff)`` is taken. A
+            :class:`~gm_attention.nn.stencil_plan.StencilPlan` or
+            :class:`~gm_attention.nn.stencil_plan.StencilPlans` in this
+            position counts as ``plan``, as a block forwards it to its mixer.
+        plan
+            Instead of ``edges``: a plan over a stencil built at
+            ``self.cutoff``, or a ``StencilPlans`` holding one, on which the
+            layer is evaluated by
+            :func:`~gm_attention.nn.stencil_attention.stencil_attention` on
+            the dense fixed-grid layout, the same values to summation order;
+            ``x`` may then carry leading batch axes.
 
         Returns
         -------
         SO2FeatureField
             Node-level feature field of type ``field_type_out``.
         """
+        edges, plan = split_edges_and_plan(edges, plan, self.cutoff)
+        if plan is not None:
+            from gm_attention.nn.stencil_attention import stencil_attention
+
+            return stencil_attention(self, x, plan)
         edges = _resolve_edges(edges, self.cutoff)
         _validate_node_field(x, self.field_type_in, edges)
         with torch.profiler.record_function("gm::attention/attend"):
@@ -582,7 +602,9 @@ class SO2MHSA(nn.Module):
     def forward(
         self,
         x: SO2FeatureField,
-        edges: EdgeGeometry | SphericalDiscretization,
+        edges: EdgeGeometry | SphericalDiscretization | StencilPlan | StencilPlans | None = None,
+        *,
+        plan: StencilPlan | StencilPlans | None = None,
     ) -> SO2FeatureField:
         """Apply every head and fuse the results.
 
@@ -592,13 +614,24 @@ class SO2MHSA(nn.Module):
             Node-level feature field of type ``field_type_in``.
         edges
             As in :meth:`SO2Attention.forward`, resolved once and passed as
-            an ``EdgeGeometry`` to every head.
+            an ``EdgeGeometry`` to every head; a ``StencilPlan`` or
+            ``StencilPlans`` here counts as ``plan``.
+        plan
+            Instead of ``edges``: the layer is evaluated by
+            :func:`~gm_attention.nn.stencil_attention.stencil_mhsa`, every
+            head in one pass on the dense fixed-grid layout; see
+            :meth:`SO2Attention.forward`.
 
         Returns
         -------
         SO2FeatureField
             Node-level feature field of type ``field_type_in``.
         """
+        edges, plan = split_edges_and_plan(edges, plan, self.cutoff)
+        if plan is not None:
+            from gm_attention.nn.stencil_attention import stencil_mhsa
+
+            return stencil_mhsa(self, x, plan)
         edges = _resolve_edges(edges, self.cutoff)
 
         if self.batched:

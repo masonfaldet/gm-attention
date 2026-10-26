@@ -17,6 +17,7 @@ from __future__ import annotations
 import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor
@@ -32,6 +33,9 @@ from gm_attention.discretization.edge_geometry import (
 from gm_attention.discretization.frames import build_tangent_frames
 from gm_attention.discretization.grid import SphericalGrid
 
+if TYPE_CHECKING:  # the stencil plans live in the layer package, which imports this one
+    from gm_attention.nn.stencil_plan import StencilPlans
+
 
 @dataclass(frozen=True, slots=True)
 class TensorGridLevel:
@@ -41,7 +45,11 @@ class TensorGridLevel:
     on this level (attention, depthwise convolution), or ``None`` for a
     level nothing runs on, such as the input/output level of a SegFormer
     chain, which only sources the first restriction and receives every
-    interpolation.
+    interpolation. ``plans`` optionally holds the same operators' stencil
+    plans (:class:`~gm_attention.nn.stencil_plan.StencilPlans`, one per
+    radius of the discretization) for a tensor grid in the coordinate gauge,
+    on which a model evaluates them on the dense fixed-grid layout instead;
+    a level without plans runs on the graph path.
     """
 
     #: ``(nlat, nlon)`` for a tensor-product grid; ``(subdivisions,)`` for an icosphere.
@@ -50,6 +58,14 @@ class TensorGridLevel:
     grid: SphericalGrid
     frames: Tensor  # (n_nodes, 3, 2)
     discretization: SphericalDiscretization | None
+    plans: StencilPlans | None = None
+
+    @property
+    def local(self) -> SphericalDiscretization | StencilPlans | None:
+        """What a layer on this level aggregates over: the plans when the
+        level has them, else the discretization; what a model hands to
+        its blocks."""
+        return self.plans if self.plans is not None else self.discretization
 
     @property
     def n_nodes(self) -> int:
@@ -93,7 +109,9 @@ class TensorGridHierarchy:
         level and every transfer tiled, so ``count`` panoramas run through a
         model as one graph, each aggregating within its own copy. Node
         ``b * n + i`` of a level is node ``i`` of sample ``b``.
-        ``count == 1`` returns ``self``."""
+        ``count == 1`` returns ``self``. The union is not a tensor grid, so
+        the levels' stencil plans are dropped: a tiled hierarchy runs on the
+        graph path."""
         count = int(count)
         if count == 1:
             return self
@@ -133,6 +151,7 @@ class TensorGridHierarchy:
                         None if level.discretization is None
                         else level.discretization.to(device=device)
                     ),
+                    plans=None if level.plans is None else level.plans.to(device=device),
                 )
                 for level in self.levels
             ),

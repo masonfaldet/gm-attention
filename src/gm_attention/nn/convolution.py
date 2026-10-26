@@ -34,6 +34,7 @@ from gm_attention.nn._scatter import gather_to_edges, scatter_add_to_nodes
 from gm_attention.nn.depthwise import SO2DepthwiseKernel, stacked_coefficients
 from gm_attention.nn.kernels import RadialBasisKind, SO2SteerableKernel
 from gm_attention.nn.linear import SO2Linear
+from gm_attention.nn.stencil_plan import StencilPlan, StencilPlans, split_edges_and_plan
 from gm_attention.representations.field_type import (
     SO2FeatureField,
     SO2FieldType,
@@ -235,7 +236,9 @@ class SO2Convolution(nn.Module):
     def forward(
         self,
         x: SO2FeatureField,
-        edges: EdgeGeometry | SphericalDiscretization,
+        edges: EdgeGeometry | SphericalDiscretization | StencilPlan | StencilPlans | None = None,
+        *,
+        plan: StencilPlan | StencilPlans | None = None,
     ) -> SO2FeatureField:
         """Aggregate node features over each node's incoming neighborhood.
 
@@ -250,7 +253,16 @@ class SO2Convolution(nn.Module):
             or a ``SphericalDiscretization``, from which the layer takes
             ``edges_within(self.cutoff)``, served from the discretization's
             radius cache (``prepare_windows`` populates it ahead of the
-            first forward).
+            first forward). A :class:`~gm_attention.nn.stencil_plan.StencilPlan`
+            or :class:`~gm_attention.nn.stencil_plan.StencilPlans` in this
+            position counts as ``plan``, as a block forwards it to its mixer.
+        plan
+            Instead of ``edges``: a plan over a stencil built at
+            ``self.cutoff``, or a ``StencilPlans`` holding one, on which the
+            layer is evaluated by
+            :func:`~gm_attention.nn.stencil_convolution.stencil_convolution`
+            on the dense fixed-grid layout, the same values to summation
+            order; ``x`` may then carry leading batch axes.
 
         Returns
         -------
@@ -258,6 +270,11 @@ class SO2Convolution(nn.Module):
             Node-level feature field of type ``field_type_out``, batch shape
             ``(n_nodes,)``.
         """
+        edges, plan = split_edges_and_plan(edges, plan, self.cutoff)
+        if plan is not None:
+            from gm_attention.nn.stencil_convolution import stencil_convolution
+
+            return stencil_convolution(self, x, plan)
         if isinstance(edges, SphericalDiscretization):
             edges = edges.edges_within(self.cutoff)
 
@@ -382,6 +399,8 @@ class SO2Convolution(nn.Module):
         if chunk_size < 1:
             raise ValueError(f"chunk_size must be at least 1, got {chunk_size}.")
 
+        if isinstance(edges, (StencilPlan, StencilPlans)):
+            raise TypeError("A StencilPlan evaluates the layer through forward only; chunked evaluation runs on the graph path.")
         if isinstance(edges, SphericalDiscretization):
             edges = edges.edges_within(self.cutoff)
 

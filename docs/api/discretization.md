@@ -202,7 +202,10 @@ slot `s` at target `(ho, wo)` from `(source_row[s], (wo + offset[s]) mod
 n_longitude)`, the access pattern of torch-harmonics' neighbourhood kernels,
 with `n_longitude` times fewer geometry rows than the edge set;
 [Fixed-grid reference](nn.md#fixed-grid-reference) evaluates the attention
-this way.
+this way one row at a time, and the [stencil path](nn.md#stencil-path) every
+row at once from a bucketed plan; a level of a grid hierarchy
+([`TensorGridLevel`][gm_attention.discretization.grids.equiangular.TensorGridLevel])
+can carry the plans of its radii beside its discretization.
 
 ::: gm_attention.discretization.stencil
 

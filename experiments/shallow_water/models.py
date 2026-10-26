@@ -24,6 +24,7 @@ from torch_harmonics.examples.models.s2transformer import SphericalTransformer
 from torch_harmonics.examples.models.sfno import SphericalFourierNeuralOperator
 
 from gm_attention.discretization.discretization import SphericalDiscretization
+from gm_attention.nn.stencil_plan import StencilPlans
 from gm_attention.discretization.grids.icosphere import IcosphereMultiresolution
 from gm_attention.nn.blocks import (
     IcoDecode,
@@ -614,18 +615,19 @@ class GmAttentionSingleLevel(nn.Module):
         self.fine_skip_init: FineSkipInit = fine_skip_init
 
     def _run_layer(
-        self, module: nn.Module, x: SO2FeatureField, discretization: SphericalDiscretization
+        self, module: nn.Module, x: SO2FeatureField, discretization: SphericalDiscretization | StencilPlans
     ) -> SO2FeatureField:
         """Apply ``module`` chunked when ``chunk_size`` is set, whole
-        otherwise; the same function either way."""
-        if self.chunk_size is None:
+        otherwise; the same function either way. Stencil plans run whole:
+        the dense fixed-grid path holds nothing per edge to chunk."""
+        if self.chunk_size is None or isinstance(discretization, StencilPlans):
             return module(x, discretization)
         return module.forward_chunked(  # type: ignore[operator]
             x, discretization, chunk_size=self.chunk_size
         )
 
     def forward(
-        self, x: SO2FeatureField, discretization: SphericalDiscretization
+        self, x: SO2FeatureField, discretization: SphericalDiscretization | StencilPlans
     ) -> SO2FeatureField:
         """Apply the model.
 
@@ -636,7 +638,12 @@ class GmAttentionSingleLevel(nn.Module):
         discretization
             The one level every layer aggregates over; each layer resolves
             its own radius through ``edges_within``, so both cutoffs must
-            have been prepared on it.
+            have been prepared on it. Or the
+            :class:`~gm_attention.nn.stencil_plan.StencilPlans` of a tensor
+            grid in the coordinate gauge at both cutoffs
+            (:func:`~gm_attention.nn.stencil_plan.build_tensor_grid_geometry`),
+            on which every layer runs on the dense fixed-grid layout, the
+            same function to summation order.
         """
         if x.field_type != self.input_field_type:
             raise ValueError(

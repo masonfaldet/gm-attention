@@ -295,8 +295,11 @@ class SO2TransformerBlock(nn.Module):
         x
             Node-level feature field of type ``field_type``.
         edges
-            Passed straight through to the internal ``SO2MHSA``; either an
-            ``EdgeGeometry`` or a ``SphericalDiscretization``.
+            Passed straight through to the mixer; either an
+            ``EdgeGeometry`` or a ``SphericalDiscretization``, or a
+            :class:`~gm_attention.nn.stencil_plan.StencilPlan` over a stencil
+            built at the block's cutoff, which evaluates the mixer on the
+            dense fixed-grid layout (see :meth:`SO2MHSA.forward`).
 
         Returns
         -------

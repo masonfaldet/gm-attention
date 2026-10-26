@@ -21,6 +21,8 @@ rows included, from at least one coarse node.
 
 from __future__ import annotations
 
+import dataclasses
+
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -38,8 +40,10 @@ from gm_attention.discretization.grids.equiangular import (
     TensorGridHierarchy,
     build_grid_hierarchy,
 )
+from gm_attention.discretization.frames import build_coordinate_frames
 from gm_attention.discretization.grids.icosphere import build_icosphere_grid
 from gm_attention.discretization.grids.torch_harmonics import build_torch_harmonics_grid
+from gm_attention.nn.stencil_plan import build_stencil_plans
 
 #: Latitude taps of the registry's ``kernel_shape=(5, 4)``: DISCO support ``(5 + 1) * 0.5 * pi / (nlat - 1)``.
 SEGFORMER_KERNEL_LATITUDE = 5
@@ -176,6 +180,7 @@ def build_segformer_hierarchy(
     icosphere_levels: Sequence[int] | None = None,
     frames: Sequence[Tensor | None] | None = None,
     lateral: bool = False,
+    stencil_plans: bool = False,
     dtype: torch.dtype = torch.float32,
     device: torch.device | str | None = None,
 ) -> TensorGridHierarchy:
@@ -194,6 +199,14 @@ def build_segformer_hierarchy(
     (target). Each stage level prepares its attention and mix radii, and
     its readout radius when the readout convolves. ``lateral=True`` adds
     the top-down transfers of a fusing decoder (``hierarchy.lateral_edges``).
+    ``stencil_plans=True`` gives every ``"legendre-gauss"`` level that
+    carries a discretization the stencil plans of its radii
+    (``TensorGridLevel.plans``), on which the model runs the level's blocks
+    and readout on the dense fixed-grid layout; such levels then take the
+    coordinate frames unless ``frames`` names theirs, since the stencil
+    needs the frames covariant under the grid's rotations. Levels of other
+    kinds (the equiangular input grid with its poles, icosphere stages) keep
+    the graph path; at least one level must take plans.
     """
     if radii.num_stages != len(stage_shapes):
         raise ValueError(
@@ -221,7 +234,20 @@ def build_segformer_hierarchy(
     readouts = radii.readout if radii.readout is not None else [None] * radii.num_stages
     for attention, mix, readout in zip(radii.attention, radii.mix, readouts, strict=True):
         local.append([attention, mix] if readout is None else [attention, mix, readout])
-    return build_grid_hierarchy(
+    foldable = [kind == "legendre-gauss" and cutoffs is not None for kind, cutoffs in zip(kinds, local, strict=True)]
+    if stencil_plans:
+        if not any(foldable):
+            raise ValueError(
+                "stencil_plans needs a 'legendre-gauss' level with operators on it; the stages are "
+                f"{grid_internal!r} (pole nodes have no coordinate frame, icospheres no stencil)."
+            )
+        if frames is None:
+            # The coordinate gauge, on which the stencil folds; the other levels keep the default frames.
+            frames = [
+                build_coordinate_frames(g.nodes) if kind == "legendre-gauss" else None
+                for g, kind in zip(grids, kinds, strict=True)
+            ]
+    hierarchy = build_grid_hierarchy(
         grids, kinds, shapes,
         restrict_cutoffs=list(radii.merge),
         interpolate_cutoffs=list(radii.interpolate),
@@ -231,3 +257,15 @@ def build_segformer_hierarchy(
         # interpolation radius (a source-spacing radius covers any finer target).
         lateral_cutoffs=list(radii.interpolate[1:]) if lateral else None,
     )
+    if not stencil_plans:
+        return hierarchy
+    levels = []
+    for level, cutoffs, takes_plans in zip(hierarchy.levels, local, foldable, strict=True):
+        if not takes_plans:
+            levels.append(level)
+            continue
+        assert level.discretization is not None and cutoffs is not None
+        nlat, nlon = level.shape
+        plans = build_stencil_plans(level.discretization, cutoffs, n_latitude=int(nlat), n_longitude=int(nlon))
+        levels.append(dataclasses.replace(level, plans=plans))
+    return dataclasses.replace(hierarchy, levels=tuple(levels))
